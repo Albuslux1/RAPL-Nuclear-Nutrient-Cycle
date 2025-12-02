@@ -1,0 +1,26 @@
+# Reactor Core Specification (v1.0)
+
+## 1. Core Geometry & Capacity
+* **Type:** Passive Thermal-Hydraulic Bioreactor
+* **Volume:** 10,000 Liters (10 m³) per unit
+* **Throughput:** 1 ton/day (continuous feed)
+* **Operating Temperature:** 60°C – 90°C (maintained via decay heat)
+
+## 2. Fuel Source Assembly
+* **Isotope:** Strontium-90 (Sr-90)
+* **Form Factor:** Sintered Ceramic Pellets (SrTiO₃)
+* **Cladding:** Zirconium Alloy (Zircaloy-4), 0.5mm thickness
+* **Array:** Hexagonal bundle, centrally mounted for uniform heat distribution
+* **Activity:** 1-5 kCi total load per reactor
+
+## 3. Containment Architecture (Quad-Barrier)
+The safety of the RAPL system relies on four independent containment layers:
+1.  **Ceramic Lattice:** The Sr-90 is chemically bound in a non-soluble ceramic matrix.
+2.  **Zirconium Cladding:** Corrosion-resistant, pressure-sealed metal shell.
+3.  **Chemical Trap:** The slurry contains **Biochar (5% w/w)** to adsorb immediate leaks.
+4.  **Zeolite Shield:** The reactor vessel is cast from **Clinoptilolite-Impregnated Concrete** (15cm thick), acting as a permanent ion-exchange barrier for any escaping radionuclides.
+
+## 4. Operational Parameters
+* **Pressure:** Ambient (Negative pressure ventilation system)
+* **Phosphate Recovery Target:** >24% efficiency (via GLDA chelation)
+* **Residence Time:** 7-14 days per batch

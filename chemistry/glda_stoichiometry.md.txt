@@ -1,0 +1,65 @@
+# Chemical Protocol: GLDA Chelation & Struvite Recovery
+
+## 1. The Chemical Objective
+The core challenge of the RAPL process is **Selectivity**. We must liberate Phosphorus (P) from organic sludge without allowing Strontium-90 (Sr-90) to co-precipitate into the final fertilizer product.
+
+**The Solution:** Use **L-Glutamic acid N,N-diacetic acid (GLDA)** as a "Molecular Bodyguard." GLDA selectively binds divalent cations (Sr²⁺, Ca²⁺, heavy metals), keeping them soluble in the waste stream, while allowing Phosphate ions (PO₄³⁻) to remain free for harvesting.
+
+---
+
+## 2. Stoichiometry & Molar Ratios
+
+### The Chelation Mechanism
+GLDA acts as a tetradentate chelator, wrapping around metal ions in a 1:1 molar ratio.
+
+**Primary Reaction (Strontium Sequestration):**
+$$\text{Sr}^{2+} + \text{GLDA}^{4-} \rightarrow [\text{Sr(GLDA)}]^{2-}$$
+
+* **Stability Constant (Log K):** ~8.5 (Estimated for Sr²⁺).
+* **Function:** This complex is highly stable in aqueous solution, preventing the Strontium from reacting with the liberated Phosphate to form Strontium Phosphate (Sr₃(PO₄)₂), which is insoluble.
+
+### Mass Balance (Per 1000 kg Batch)
+Based on average sewage sludge composition and Sr-90 trace contamination limits.
+
+| Component | Concentration | Molecular Weight | Role |
+| :--- | :--- | :--- | :--- |
+| **Sewage Sludge (Dry)** | 1000 kg | N/A | Feedstock |
+| **Target P** | ~1.0 kg | 30.97 g/mol | Yield Target |
+| **GLDA (Tetrasodium)** | **3.0 kg** | 351.1 g/mol | Chelating Agent |
+| **Magnesium (Mg²⁺)** | Added to 1:1:1 ratio | 24.30 g/mol | Struvite Precursor |
+
+> **Engineering Note:** We use a **0.3% w/w** GLDA concentration (3kg per ton). This provides a massive molar excess relative to the trace Strontium, ensuring virtually 100% capture probability ("The Law of Mass Action").
+
+---
+
+## 3. The pH Phase Cycle (The "Chef's Steps")
+
+The reaction is driven by precise pH manipulation.
+
+### Phase 1: Acidic Lysis (pH 4.0 – 5.0)
+* **Action:** Reactor slurry is acidified (organic acids + decay heat).
+* **Effect:**
+    * Solid mineral phosphates dissolve: $\text{Ca}_{10}(\text{PO}_4)_6(\text{OH})_2 + \text{H}^+ \rightarrow \text{Ca}^{2+} + \text{PO}_4^{3-}$
+    * **Critical Safety Step:** GLDA immediately binds any released Sr²⁺ ions. Because the environment is acidic, the Strontium *wants* to be free, but the GLDA cage holds it.
+
+### Phase 2: The "Struvite Crash" (pH 8.5)
+* **Action:** After 7 days of irradiation, Magnesium (Mg²⁺) and Ammonium (NH₄⁺) are verified, and pH is raised using NaOH or lime.
+* **Effect:** The "Solubility Product" ($K_{sp}$) of Struvite is exceeded.
+* **Reaction:**
+    $$\text{Mg}^{2+} + \text{NH}_4^+ + \text{PO}_4^{3-} + 6\text{H}_2\text{O} \rightarrow \text{MgNH}_4\text{PO}_4 \cdot 6\text{H}_2\text{O} \downarrow$$
+* **The Safety Mechanism:** At pH 8.5, Strontium normally precipitates. However, the **[Sr-GLDA]²⁻** complex remains soluble.
+    * **Result:** White Struvite crystals form (solid). Strontium stays in the liquid (supernatant).
+
+---
+
+## 4. Radiolytic Stability
+* **Challenge:** High beta radiation can degrade organic molecules like GLDA.
+* **Resilience:** GLDA is structurally more resistant to radiolysis than EDTA.
+* **Breakdown Products:** If GLDA degrades, it breaks into Glycine and Glutamate (harmless amino acids).
+* **Safety Factor:** The reactor residence time (7-14 days) is well within the half-life of GLDA under 1 kCi exposure. The chelation holds long enough to filter the crystals.
+
+## 5. Final Separation
+1.  **Filtration:** Slurry is passed through a 10-micron mesh.
+2.  **Solids (Fertilizer):** Captured Struvite crystals. Checked for radiation.
+3.  **Liquids (Waste):** Contains the dissolved [Sr-GLDA] complex.
+4.  **Disposal:** The liquid waste is passed through a **Zeolite/Biochar** column to strip the Strontium for recycling or vitrification.

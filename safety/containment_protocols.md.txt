@@ -1,0 +1,70 @@
+# Safety Manual: The Quad-Barrier Containment Protocol (QBCP)
+
+## 1. Philosophy: Defense-in-Depth
+The RAPL system operates on the principle of **"Fail-Safe layering."** We assume that leaks *will* occur over long operational timelines. Therefore, the system is designed not just to prevent leaks, but to **actively capture and neutralize** them at four distinct physical boundaries.
+
+---
+
+## 2. The Four Barriers (Physical & Chemical)
+
+### Barrier I: The Ceramic Matrix (Source Immobilization)
+* **Material:** Sintered Strontium Phosphate Ceramic ($\text{Sr}_3(\text{PO}_4)_2$).
+* **Mechanism:** Chemical insolubility.
+* **Function:** The Strontium-90 is not a loose powder or liquid; it is fired into a solid ceramic rock. Even if the cladding breaches, the fuel pellet itself is highly resistant to dissolving in water.
+* **Failure Mode:** Physical pulverization (crushing) is required to mobilize the isotope.
+
+### Barrier II: Zirconium Cladding (Primary Containment)
+* **Material:** Zircaloy-4 (0.5mm thickness).
+* **Mechanism:** Physical isolation.
+* **Function:** Standard nuclear industry cladding. It is **Beta-Transparent** (allowing the ionizing radiation out to treat the sludge) but **Hermetically Sealed** (keeping the radioactive atoms in).
+* **Failure Mode:** Corrosion cracking or mechanical puncture.
+
+### Barrier III: The "Black Sponge" (Slurry Mitigation)
+* **Material:** Activated Biochar (5% w/w) + GLDA Chelator.
+* **Mechanism:** Adsorption and Chelation.
+* **Function:** This is the active safety layer within the working fluid.
+    * If Sr-90 ions escape Barrier I & II, the **GLDA** immediately binds them ($\text{Log K} \approx 8.5$).
+    * The **Biochar** acts as a "scrubber," physically adsorbing heavy metals and radionuclides onto its massive surface area.
+* **Result:** Leaks are trapped in the solid waste matrix (Biochar), preventing migration into the liquid fertilizer stream.
+
+### Barrier IV: The "Geological Filter" (Vessel Shielding)
+* **Material:** Reinforced Concrete impregnated with **Clinoptilolite (Natural Zeolite)**.
+* **Mechanism:** Cation Exchange.
+* **Function:** The reactor vessel walls (15cm thick) are not just structural; they are a filter. Zeolites have a honeycomb lattice with a high affinity for Strontium.
+* **The "Self-Healing" Effect:** If radioactive water penetrates the concrete, the Zeolite crystals within the wall physically swap sodium ions for strontium ions, trapping the radiation inside the wall structure. The leak "mineralizes" before reaching the environment.
+
+
+
+[Image of nuclear containment barrier layers diagram]
+
+
+---
+
+## 3. Operational Hazard Controls
+
+### A. Radiolysis & Hydrogen Gas
+Beta radiation splits water molecules: $2\text{H}_2\text{O} \rightarrow 2\text{H}_2 + \text{O}_2$.
+* **Risk:** Explosive gas buildup inside the reactor vessel.
+* **Mitigation:**
+    * **Negative Pressure Ventilation:** Constant airflow removes H2 gas.
+    * **Catalytic Recombiners:** Passive plates that recombine Hydrogen and Oxygen back into water (standard submarine tech).
+
+### B. Thermal Runaway
+* **Risk:** The reactor gets too hot.
+* **Mitigation:** **Passive Physics.** The decay heat of Sr-90 is fixed. It cannot "spike" like a fission chain reaction. The reactor geometry is tuned so that maximum temperature (equilibrium) never exceeds 95°C, even if cooling pumps fail. It is incapable of melting down.
+
+---
+
+## 4. The "No-Human" Zone
+Due to the localized bremsstrahlung (X-ray) radiation fields, biological maintenance is prohibited during operation.
+
+* **Requirement:** Maintenance is performed exclusively by **Rad-Hardened Robotics** running the **AGI Dancer Protocol**.
+* **Why AGI?** Standard automation fails in high-radiation zones due to "Single Event Upsets" (bit-flips). The AGI Dancer Protocol utilizes the **Coherence Index** to detect logic corruption in real-time, allowing the robot to "heal" its own decision-making process during exposure.
+
+---
+
+## 5. Emergency Breach Protocol
+In the event of a catastrophic structural failure (e.g., earthquake cracking the vessel):
+1.  **Liquid Lock:** Emergency valves seal the drainage.
+2.  **Zeolite Flood:** The facility foundation is lined with a dry Zeolite bed (1 meter depth). Any leaking fluid hits this bed and is instantly adsorbed.
+3.  **Vitrification:** The contaminated Zeolite/Biochar mass can be collected and melted into glass (Vitrified) for permanent geological storage.

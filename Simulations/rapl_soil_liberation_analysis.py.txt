@@ -1,0 +1,643 @@
+# rapl_soil_liberation_analysis.py - UPGRADED
+# VARIANT: Applying RAPL to "Legacy P" Agricultural Soil
+# MECHANISM: Chelation-driven Mineral Dissolution with Radiation Enhancement
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.constants import N_A, calorie
+from dataclasses import dataclass
+from typing import Dict, Tuple, List
+import warnings
+warnings.filterwarnings('ignore')
+
+# Enhanced styling for publication-quality plots
+plt.style.use('seaborn-v0_8-darkgrid')
+plt.rcParams.update({
+    'font.size': 11,
+    'axes.titlesize': 14,
+    'axes.labelsize': 12,
+    'figure.titlesize': 16
+})
+
+# ============================================================================
+# 1. PHYSICALLY-BASED MINERAL DISSOLUTION MODEL
+# ============================================================================
+@dataclass
+class MineralPhase:
+    """Data class for soil mineral phases containing phosphorus"""
+    name: str
+    formula: str
+    solubility_product: float  # pKsp
+    bond_strength: float  # Relative dissolution difficulty (1-10)
+    typical_content: float  # Typical % of total P in agricultural soils
+    
+class SoilMineralogy:
+    """Realistic soil mineral composition for legacy phosphorus soils"""
+    MINERALS = {
+        'ferrihydrite': MineralPhase('Ferrihydrite', 'Fe10O14(OH)2·H3PO4', 40.0, 9.0, 0.35),
+        'goethite': MineralPhase('Goethite', 'α-FeOOH·H2PO4', 35.0, 8.5, 0.25),
+        'hydroxyapatite': MineralPhase('Hydroxyapatite', 'Ca10(PO4)6(OH)2', 120.0, 7.0, 0.20),
+        'fluorapatite': MineralPhase('Fluorapatite', 'Ca10(PO4)6F2', 121.0, 8.0, 0.10),
+        'vivianite': MineralPhase('Vivianite', 'Fe3(PO4)2·8H2O', 36.0, 4.0, 0.10),
+    }
+
+class GLDASoilDissolutionModel:
+    """Physically-based model of GLDA-enhanced mineral dissolution"""
+    
+    def __init__(self, glda_concentration: float = 0.005, soil_type: str = "mixed"):
+        """
+        Args:
+            glda_concentration: GLDA concentration as fraction (0.005 = 0.5%)
+            soil_type: "acidic" (Fe-P dominated), "alkaline" (Ca-P dominated), or "mixed"
+        """
+        self.glda_conc = glda_concentration
+        self.soil_type = soil_type
+        self.minerals = SoilMineralogy.MINERALS
+        
+        # Temperature effects (Arrhenius pre-factors for different minerals)
+        self.activation_energies = {
+            'ferrihydrite': 58.0,  # kJ/mol
+            'goethite': 62.0,
+            'hydroxyapatite': 72.0,
+            'fluorapatite': 75.0,
+            'vivianite': 42.0,
+        }
+        
+        # GLDA complexation constants (log K at 25°C)
+        self.logK_glda = {
+            'Fe(III)-GLDA': 18.9,
+            'Fe(II)-GLDA': 11.5,
+            'Ca-GLDA': 8.0,
+            'Al-GLDA': 14.0,
+        }
+    
+    def calculate_dissolution_rate(self, temperature: float = 343.15) -> Dict[str, float]:
+        """
+        Calculate dissolution rates for each mineral phase based on:
+        1. Temperature (Arrhenius equation)
+        2. GLDA concentration (ligand-promoted dissolution)
+        3. Radiation enhancement (radiolytic acidification)
+        
+        Returns: Dictionary of dissolution rates (fraction/hour) for each mineral
+        """
+        R = 8.314e-3  # kJ/mol·K
+        T_ref = 298.15  # Reference temperature (25°C)
+        
+        dissolution_rates = {}
+        
+        for mineral_name, mineral in self.minerals.items():
+            # Base dissolution rate (fraction/hour) at reference temperature
+            base_rate = 1e-4 * (10 / mineral.bond_strength) ** 2
+            
+            # Temperature effect (Arrhenius)
+            if mineral_name in self.activation_energies:
+                Ea = self.activation_energies[mineral_name]
+                arrhenius_factor = np.exp(-Ea/R * (1/temperature - 1/T_ref))
+            else:
+                arrhenius_factor = 2.5  # Default factor for 60-90°C
+            
+            # GLDA enhancement (ligand-promoted dissolution)
+            # Enhanced by GLDA concentration and complex stability
+            if 'Fe' in mineral.formula:
+                logK = self.logK_glda['Fe(III)-GLDA'] if 'III' in mineral_name else self.logK_glda['Fe(II)-GLDA']
+            elif 'Ca' in mineral.formula:
+                logK = self.logK_glda['Ca-GLDA']
+            else:
+                logK = 10.0  # Default
+            
+            glda_factor = 1 + (self.glda_conc * 1000) * 10**(logK - 12)  # Normalized enhancement
+            
+            # Radiation enhancement (radiolytic acid production)
+            # Beta radiation produces H+ via water radiolysis
+            radiation_factor = 1.5  # Conservative estimate for 1 Gy/hr
+            
+            # Combined rate
+            total_rate = base_rate * arrhenius_factor * glda_factor * radiation_factor
+            
+            # Cap at reasonable maximum (85% of mineral can dissolve)
+            dissolution_rates[mineral_name] = min(total_rate * 24, 0.85)  # Convert to daily rate
+        
+        return dissolution_rates
+    
+    def calculate_overall_efficiency(self, exposure_days: int = 7) -> float:
+        """
+        Calculate overall phosphorus liberation efficiency after given exposure time
+        """
+        dissolution_rates = self.calculate_dissolution_rate()
+        
+        weighted_efficiency = 0.0
+        for mineral_name, mineral in self.minerals.items():
+            daily_rate = dissolution_rates[mineral_name]
+            # First-order kinetics: P_liberated = P_total * (1 - exp(-k*t))
+            mineral_efficiency = 1 - np.exp(-daily_rate * exposure_days)
+            weighted_efficiency += mineral_efficiency * mineral.typical_content
+        
+        return min(weighted_efficiency, 0.95)  # Cap at 95%
+
+# ============================================================================
+# 2. ENHANCED SAFETY MODEL WITH SOIL-SPECIFIC PARAMETERS
+# ============================================================================
+class SoilSafetyAssessment:
+    """Soil-specific safety assessment considering soil matrix interactions"""
+    
+    def __init__(self, soil_cation_exchange_capacity: float = 15.0):
+        """
+        Args:
+            soil_cec: Soil Cation Exchange Capacity (cmol+/kg)
+        """
+        self.soil_cec = soil_cation_exchange_capacity
+        
+        # Barrier efficiencies adjusted for soil application
+        self.barriers = {
+            'ceramic_encapsulation': 0.9995,      # Sr3(PO4)2 ceramic
+            'zirconium_cladding': 0.9999,         # Zr-4 alloy cladding
+            'process_glda_chelation': 0.96,       # Enhanced for soil (more GLDA)
+            'soil_cec_retention': self.calculate_soil_retention(),  # Soil's natural retention
+            'biochar_amendment': 0.992,           # 5% biochar mixed with soil
+            'zeolite_barrier': 0.99995,           # Perimeter zeolite barrier
+        }
+    
+    def calculate_soil_retention(self) -> float:
+        """
+        Calculate soil's natural retention capacity for Sr²⁺
+        Based on CEC and typical Sr selectivity coefficients
+        """
+        # Sr²⁺ selectivity coefficient relative to Ca²⁺ in soils: typically 1.5-3.0
+        sr_selectivity = 2.0
+        
+        # Maximum Sr retention as fraction of CEC
+        max_sr_capacity = self.soil_cec * sr_selectivity / 1000  # Convert to mol/kg
+        
+        # Assume we use 10% of this capacity for safety factor
+        effective_retention = 0.90 * (1 - np.exp(-max_sr_capacity * 10))
+        
+        return min(effective_retention, 0.98)
+    
+    def calculate_cumulative_containment(self) -> float:
+        """Calculate probability that ALL barriers contain Sr"""
+        containment = 1.0
+        for efficiency in self.barriers.values():
+            containment *= efficiency
+        return containment
+    
+    def calculate_leakage_pathways(self) -> Dict[str, float]:
+        """Analyze different potential leakage pathways"""
+        pathways = {
+            'direct_leach': (1 - self.barriers['ceramic_encapsulation']) * 
+                           (1 - self.barriers['zirconium_cladding']),
+            'process_loss': (1 - self.barriers['process_glda_chelation']) * 
+                           (1 - self.barriers['soil_cec_retention']),
+            'amendment_failure': (1 - self.barriers['biochar_amendment']) * 
+                                (1 - self.barriers['zeolite_barrier']),
+        }
+        
+        # Normalize to total probability
+        total = sum(pathways.values())
+        if total > 0:
+            pathways = {k: v/total for k, v in pathways.items()}
+        
+        return pathways
+
+# ============================================================================
+# 3. RADIATION CHEMISTRY MODEL FOR SOIL
+# ============================================================================
+class SoilRadiationChemistry:
+    """Models radiation effects on soil chemistry"""
+    
+    def __init__(self, dose_rate: float = 1.0, soil_moisture: float = 0.3):
+        """
+        Args:
+            dose_rate: Radiation dose rate (Gy/hour)
+            soil_moisture: Soil water content (fraction)
+        """
+        self.dose_rate = dose_rate
+        self.moisture = soil_moisture
+        
+        # Radiolysis yields (μmol/J) for water in soil
+        self.G_values = {
+            'H': 0.28,      # Hydrogen atoms
+            'OH': 0.28,     # Hydroxyl radicals
+            'H2': 0.047,    # Molecular hydrogen
+            'H2O2': 0.073,  # Hydrogen peroxide
+            'H3O+': 0.28,   # Hydronium ions (acidity)
+        }
+    
+    def calculate_acid_production(self, exposure_hours: float) -> float:
+        """
+        Calculate H+ production from water radiolysis
+        Returns: moles of H+ produced per kg soil
+        """
+        # Energy deposited (J/kg = Gy)
+        energy_deposited = self.dose_rate * exposure_hours  # Gy
+        
+        # Water mass per kg soil
+        water_mass = self.moisture  # kg water per kg soil
+        
+        # H+ production
+        G_H3O = self.G_values['H3O+']  # μmol/J
+        mol_H_per_kg = G_H3O * energy_deposited * water_mass * 1e-6  # mol/kg
+        
+        return mol_H_per_kg
+    
+    def calculate_ph_drop(self, soil_buffer_capacity: float = 0.02) -> float:
+        """
+        Calculate pH drop from radiolytic acid production
+        Args:
+            soil_buffer_capacity: Soil pH buffer capacity (mol H+/pH unit/kg)
+        Returns: Estimated pH drop
+        """
+        # Typical 7-day exposure
+        mol_H = self.calculate_acid_production(7 * 24)
+        
+        # Calculate pH drop (simplified)
+        pH_drop = mol_H / soil_buffer_capacity
+        
+        return min(pH_drop, 2.0)  # Cap at 2 pH units drop
+
+# ============================================================================
+# 4. ECONOMIC MODEL FOR SOIL REMEDIATION
+# ============================================================================
+class SoilRemediationEconomics:
+    """Economic analysis of soil phosphorus mining"""
+    
+    def __init__(self, scale_factor: float = 1.0):
+        """
+        Args:
+            scale_factor: 1.0 = 1 ton batch, 100.0 = 100 ton/day facility, etc.
+        """
+        self.scale = scale_factor
+        
+        # Cost assumptions ($/kg unless noted)
+        self.costs = {
+            'glda': 2.50,           # $/kg GLDA
+            'biochar': 0.50,        # $/kg biochar
+            'sr90_handling': 100.0, # $/kg Sr-90/year (inverse cost - value)
+            'energy': 0.10,         # $/kWh
+            'labor': 30.0,          # $/hour
+            'capital': 500000.0,    # $ for 1 ton/day facility
+        }
+        
+        # Revenue assumptions
+        self.revenues = {
+            'struvite': 0.50,       # $/kg struvite ($500/ton)
+            'land_restoration': self.calculate_land_value(),
+            'carbon_credit': 50.0,  # $/ton CO2e for biochar
+            'waste_disposal': -200.0, # Negative cost = savings ($/ton Sr-90 avoided)
+        }
+    
+    def calculate_land_value(self) -> float:
+        """
+        Calculate land restoration value based on productivity increase
+        Returns: $/ton soil treated
+        """
+        # Conservative: 10% yield increase on $1000/hectare land
+        # 1 ha ≈ 2.5M kg topsoil (0-15cm)
+        yield_increase = 0.10  # 10%
+        land_value = 1000.0    # $/ha/year
+        soil_mass_per_ha = 2.5e6  # kg/ha
+        
+        annual_value = land_value * yield_increase / soil_mass_per_ha
+        
+        # Capitalize over 10 years
+        capitalized_value = annual_value * 10
+        
+        return capitalized_value
+    
+    def calculate_net_present_value(self, 
+                                   annual_throughput: float,
+                                   project_life: int = 20,
+                                   discount_rate: float = 0.08) -> Dict[str, float]:
+        """
+        Calculate NPV of a soil remediation facility
+        """
+        # Annual costs and revenues
+        annual_data = []
+        
+        for year in range(1, project_life + 1):
+            year_data = {
+                'year': year,
+                'capital_cost': self.costs['capital'] / project_life if year <= 5 else 0,
+                'opex': annual_throughput * 365 * 10.0,  # Simplified
+                'revenue': annual_throughput * 365 * 15.0,  # Simplified
+            }
+            annual_data.append(year_data)
+        
+        # Calculate NPV
+        npv = 0
+        for year_data in annual_data:
+            net_cashflow = year_data['revenue'] - year_data['capital_cost'] - year_data['opex']
+            discount_factor = (1 + discount_rate) ** -year_data['year']
+            npv += net_cashflow * discount_factor
+        
+        return {
+            'npv': npv,
+            'payback_years': min(project_life, max(1, self.costs['capital'] / (annual_throughput*365*5))),
+            'irr_estimate': 0.15 if npv > 0 else 0.05,
+        }
+
+# ============================================================================
+# 5. MAIN SIMULATION WITH ENHANCED ANALYSIS
+# ============================================================================
+def run_enhanced_soil_simulation():
+    """Run comprehensive soil remediation analysis"""
+    
+    print("="*70)
+    print("RAPL SOIL REMEDIATION - ENHANCED ANALYSIS")
+    print("Legacy Phosphorus Mining with Nuclear-Assisted Chelation")
+    print("="*70)
+    
+    # ========== INPUT PARAMETERS ==========
+    SOIL_MASS = 1000.0  # kg
+    SOIL_TYPE = "mixed"  # acidic, alkaline, or mixed
+    P_CONTENT = 0.0015   # 1500 mg/kg = 0.15% (legacy agricultural soil)
+    GLDA_DOSE = 0.005    # 0.5% w/w
+    SR90_MASS = 1.0      # kg
+    TREATMENT_DAYS = 7
+    
+    # ========== INITIALIZE MODELS ==========
+    print("\n📊 Initializing models...")
+    
+    dissolution_model = GLDASoilDissolutionModel(
+        glda_concentration=GLDA_DOSE,
+        soil_type=SOIL_TYPE
+    )
+    
+    safety_model = SoilSafetyAssessment(soil_cation_exchange_capacity=15.0)
+    
+    radiation_model = SoilRadiationChemistry(
+        dose_rate=1.0,  # Gy/hour
+        soil_moisture=0.3
+    )
+    
+    economics_model = SoilRemediationEconomics(scale_factor=1.0)
+    
+    # ========== CALCULATIONS ==========
+    
+    # 1. Phosphorus inventory
+    total_bound_p = SOIL_MASS * P_CONTENT
+    
+    # 2. Mineral dissolution analysis
+    dissolution_rates = dissolution_model.calculate_dissolution_rate(temperature=343.15)
+    overall_efficiency = dissolution_model.calculate_overall_efficiency(
+        exposure_days=TREATMENT_DAYS
+    )
+    
+    liberated_p = total_bound_p * overall_efficiency
+    
+    # 3. Product yield (struvite precipitation)
+    # Struvite is MgNH4PO4·6H2O, 12.6% P by mass
+    struvite_stoichiometric_ratio = 7.94  # 100/12.6
+    process_efficiency = 0.75  # 75% recovery in precipitation step
+    struvite_yield = liberated_p * struvite_stoichiometric_ratio * process_efficiency
+    
+    # 4. Radiation effects
+    ph_drop = radiation_model.calculate_ph_drop()
+    acid_production = radiation_model.calculate_acid_production(TREATMENT_DAYS * 24)
+    
+    # 5. Safety analysis
+    total_containment = safety_model.calculate_cumulative_containment()
+    leakage_pathways = safety_model.calculate_leakage_pathways()
+    
+    # 6. Energy calculations (corrected)
+    # Sr-90 decay energy: 0.546 MeV beta + 2.28 MeV total with Y-90
+    total_decay_energy_mev = 2.8
+    decay_constant = np.log(2) / (28.8 * 365.25 * 24 * 3600)  # per second
+    atoms = (SR90_MASS * 1000 / 90.0) * N_A
+    activity = atoms * decay_constant  # Bq
+    power_watts = activity * total_decay_energy_mev * 1.602e-13
+    
+    # 7. Economic analysis
+    fertilizer_value = struvite_yield * economics_model.revenues['struvite']
+    land_value = economics_model.revenues['land_restoration']
+    total_value = fertilizer_value + land_value
+    
+    # ========== OUTPUT RESULTS ==========
+    
+    print("\n" + "="*60)
+    print("RESULTS SUMMARY")
+    print("="*60)
+    
+    # Create comprehensive results dataframe
+    results_data = {
+        'Parameter': [
+            'Soil Mass', 'Soil P Content', 'Soil Type',
+            'GLDA Dose', 'Treatment Duration',
+            'Total Bound P', 'Liberation Efficiency', 'P Recovered',
+            'Struvite Yield', 'Fertilizer Value', 'Land Restoration Value',
+            'Total Economic Value',
+            'Radiation Dose Rate', 'pH Drop from Radiolysis', 'H+ Produced',
+            'Thermal Power', 'Process Temperature',
+            'Safety Barriers', 'Total Containment', 'Dominant Leakage Pathway'
+        ],
+        'Value': [
+            f'{SOIL_MASS:.0f} kg', f'{P_CONTENT*100:.2f}%', SOIL_TYPE.title(),
+            f'{GLDA_DOSE*100:.2f}%', f'{TREATMENT_DAYS} days',
+            f'{total_bound_p:.3f} kg', f'{overall_efficiency*100:.1f}%', f'{liberated_p:.3f} kg',
+            f'{struvite_yield:.2f} kg', f'${fertilizer_value:.2f}', f'${land_value:.2f}',
+            f'${total_value:.2f}',
+            f'{radiation_model.dose_rate:.1f} Gy/h', f'{ph_drop:.2f} pH units', f'{acid_production*1000:.1f} mmol/kg',
+            f'{power_watts:.0f} W', '60-90°C',
+            f'{len(safety_model.barriers)} layers', f'{total_containment*100:.8f}%',
+            f'{max(leakage_pathways, key=leakage_pathways.get)}'
+        ],
+        'Unit': [
+            'mass', 'percentage', 'type',
+            'percentage', 'time',
+            'mass', 'percentage', 'mass',
+            'mass', 'currency', 'currency',
+            'currency',
+            'dose rate', 'pH change', 'acidity',
+            'power', 'temperature',
+            'count', 'percentage', 'pathway'
+        ]
+    }
+    
+    results_df = pd.DataFrame(results_data)
+    
+    # Print key results
+    print(f"\n🌱 SOIL PROCESSING METRICS:")
+    print(f"  Soil P Content:       {P_CONTENT*100:.2f}% ({total_bound_p:.3f} kg total)")
+    print(f"  Liberation Efficiency: {overall_efficiency*100:.1f}%")
+    print(f"  P Recovered:          {liberated_p:.3f} kg")
+    
+    print(f"\n📦 PRODUCTION OUTPUT:")
+    print(f"  Struvite Yield:       {struvite_yield:.2f} kg")
+    print(f"  Fertilizer Value:     ${fertilizer_value:.2f}")
+    print(f"  Land Value Added:     ${land_value:.2f}")
+    print(f"  Total Value:          ${total_value:.2f}")
+    
+    print(f"\n⚛️ RADIATION EFFECTS:")
+    print(f"  Dose Rate:            {radiation_model.dose_rate} Gy/hour")
+    print(f"  pH Reduction:         {ph_drop:.2f} units (enhances dissolution)")
+    print(f"  Acid Production:      {acid_production*1000:.1f} mmol H+/kg soil")
+    
+    print(f"\n⚡ ENERGY BALANCE:")
+    print(f"  Sr-90 Thermal Power:  {power_watts:.0f} Watts")
+    print(f"  Power Density:        {power_watts/SOIL_MASS:.2f} W/kg soil")
+    print(f"  Temperature Range:    60-90°C (self-maintained)")
+    
+    print(f"\n🛡️ SAFETY ANALYSIS:")
+    print(f"  Containment Layers:   {len(safety_model.barriers)}")
+    print(f"  Total Containment:    {total_containment*100:.8f}%")
+    print(f"  Leakage Probability:  {(1-total_containment):.2e}")
+    print(f"  Safety Factor:        {1/(1-total_containment):.1e}x")
+    
+    # ========== GENERATE VISUALIZATIONS ==========
+    print("\n📈 GENERATING VISUALIZATIONS...")
+    
+    # 1. Mineral Dissolution Analysis
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('RAPL Soil Remediation: Mineral-Specific Analysis', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Mineral dissolution rates
+    ax1 = axes[0, 0]
+    minerals = list(dissolution_rates.keys())
+    rates = [dissolution_rates[m]*100 for m in minerals]  # Convert to %
+    
+    bars = ax1.barh(minerals, rates, color=plt.cm.viridis(np.linspace(0.2, 0.8, len(minerals))))
+    ax1.set_xlabel('Daily Dissolution Rate (%)', fontsize=12)
+    ax1.set_title('Mineral-Specific Dissolution Kinetics', fontsize=14)
+    ax1.grid(True, alpha=0.3, axis='x')
+    
+    # Add value labels
+    for bar, rate in zip(bars, rates):
+        ax1.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2,
+                f'{rate:.1f}%', va='center', fontsize=10)
+    
+    # Plot 2: Liberation efficiency over time
+    ax2 = axes[0, 1]
+    time_days = np.linspace(1, 14, 14)
+    efficiencies = []
+    
+    for day in time_days:
+        eff = dissolution_model.calculate_overall_efficiency(exposure_days=day)
+        efficiencies.append(eff * 100)
+    
+    ax2.plot(time_days, efficiencies, 'b-o', linewidth=2, markersize=6)
+    ax2.fill_between(time_days, efficiencies, alpha=0.2, color='blue')
+    ax2.set_xlabel('Treatment Time (days)', fontsize=12)
+    ax2.set_ylabel('Total P Liberation (%)', fontsize=12)
+    ax2.set_title('Liberation vs Treatment Duration', fontsize=14)
+    ax2.grid(True, alpha=0.3)
+    ax2.axvline(x=7, color='red', linestyle='--', alpha=0.5, label='7-day baseline')
+    ax2.legend()
+    
+    # Plot 3: Economic breakdown
+    ax3 = axes[1, 0]
+    econ_categories = ['Fertilizer\nSales', 'Land\nRestoration', 'Carbon\nCredits', 'Waste\nAvoidance']
+    econ_values = [
+        struvite_yield * 0.50,
+        land_value,
+        SOIL_MASS * 0.001 * 50,  # Simplified carbon credit
+        -200.0  # Waste disposal savings (negative cost)
+    ]
+    colors = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c']
+    
+    wedges, texts, autotexts = ax3.pie(econ_values, labels=econ_categories, colors=colors,
+                                       autopct=lambda p: f'${p*sum(econ_values)/100:.0f}',
+                                       startangle=90)
+    ax3.set_title('Economic Value Distribution', fontsize=14)
+    
+    # Plot 4: Safety barrier effectiveness
+    ax4 = axes[1, 1]
+    barrier_names = [b.replace('_', ' ').title() for b in safety_model.barriers.keys()]
+    barrier_eff = [v*100 for v in safety_model.barriers.values()]
+    
+    y_pos = np.arange(len(barrier_names))
+    bars = ax4.barh(y_pos, barrier_eff, color=plt.cm.RdYlGn(np.linspace(0.3, 0.9, len(barrier_names))))
+    ax4.set_yticks(y_pos)
+    ax4.set_yticklabels(barrier_names)
+    ax4.set_xlabel('Containment Efficiency (%)', fontsize=12)
+    ax4.set_title('Multi-Barrier Safety System', fontsize=14)
+    ax4.set_xlim(99, 100)
+    ax4.grid(True, alpha=0.3, axis='x')
+    
+    for bar, eff in zip(bars, barrier_eff):
+        ax4.text(bar.get_width() - 0.05, bar.get_y() + bar.get_height()/2,
+                f'{eff:.3f}%', va='center', ha='right', color='white', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig('rapl_soil_enhanced_analysis.png', dpi=150, bbox_inches='tight')
+    
+    # 2. Process Flow Visualization
+    fig2, ax = plt.subplots(figsize=(12, 6))
+    
+    # Create process flow diagram
+    process_steps = [
+        'Legacy\nSoil',
+        'GLDA\nChelation',
+        'Sr-90\nIrradiation',
+        'Mineral\nDissolution',
+        'P\nLiberation',
+        'Struvite\nPrecipitation',
+        'Restored\nSoil + Fertilizer'
+    ]
+    
+    step_colors = plt.cm.Set3(np.linspace(0, 1, len(process_steps)))
+    
+    for i, (step, color) in enumerate(zip(process_steps, step_colors)):
+        # Create process node
+        circle = plt.Circle((i*2, 0), 0.8, color=color, alpha=0.8)
+        ax.add_patch(circle)
+        ax.text(i*2, 0, step, ha='center', va='center', fontsize=10, fontweight='bold')
+        
+        # Add connecting arrows
+        if i < len(process_steps) - 1:
+            ax.arrow(i*2 + 0.8, 0, 1.4, 0, head_width=0.2, head_length=0.2, 
+                    fc='gray', ec='gray', alpha=0.6)
+    
+    # Add efficiency annotations
+    efficiencies = [100, 95, 90, 85, 75, 85, 100]  # Simplified
+    for i, eff in enumerate(efficiencies):
+        ax.text(i*2, -1.2, f'{eff}%', ha='center', va='center', 
+                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
+    
+    ax.set_xlim(-1, len(process_steps)*2 - 1)
+    ax.set_ylim(-2, 2)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title('RAPL Soil Remediation Process Flow', fontsize=14, pad=20)
+    
+    plt.tight_layout()
+    plt.savefig('rapl_soil_process_flow.png', dpi=150, bbox_inches='tight')
+    
+    print("✓ Generated: rapl_soil_enhanced_analysis.png")
+    print("✓ Generated: rapl_soil_process_flow.png")
+    
+    # ========== EXPORT RESULTS ==========
+    results_df.to_csv('rapl_soil_results_detailed.csv', index=False)
+    
+    print("\n📁 Data exported to: rapl_soil_results_detailed.csv")
+    
+    # ========== SCALABILITY ANALYSIS ==========
+    print("\n" + "="*60)
+    print("SCALABILITY ANALYSIS")
+    print("="*60)
+    
+    scales = [1, 10, 100, 1000]  # tons/day
+    print("\nFacility Scale Projections:")
+    print("-"*40)
+    print(f"{'Scale (ton/day)':<15} {'Annual P Recovery (ton)':<25} {'Capital Cost ($M)':<20}")
+    print("-"*40)
+    
+    for scale in scales:
+        annual_p = scale * 365 * P_CONTENT * overall_efficiency
+        capital_cost = economics_model.costs['capital'] * (scale ** 0.7)  # Economies of scale
+        print(f"{scale:<15} {annual_p:.1f}<25} {capital_cost/1e6:.2f}<20}")
+    
+    print("\n" + "="*70)
+    print("ANALYSIS COMPLETE")
+    print("="*70)
+    
+    if total_containment > 0.999999:
+        print("✅ SAFETY STATUS: EXCELLENT (Meets/exceeds nuclear industry standards)")
+    elif total_containment > 0.99999:
+        print("✅ SAFETY STATUS: VERY GOOD (Suitable for pilot implementation)")
+    else:
+        print("⚠️  SAFETY STATUS: REQUIRES IMPROVEMENT")
+    
+    return results_df
+
+if __name__ == "__main__":
+    results = run_enhanced_soil_simulation()

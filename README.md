@@ -7,6 +7,8 @@
 
 > **The Concept:** A closed-loop bioreactor that utilizes the decay heat and beta radiation of Strontium-90 waste to liberate essential Phosphorus from sewage sludge, creating a circular economy for fertilizer and nuclear waste remediation.
 
+![Reactor Core Cutaway](https://github.com/user-attachments/assets/0ce30b62-9001-4004-bf64-4fe986cebaf4)
+
 ---
 
 ## 1. The Dual Crisis
